@@ -1,9 +1,12 @@
 from pathlib import Path
 import os
 import shutil
+import glob
 
 from dflow.python import (OP, OPIO, Artifact, OPIOSign,
                           upload_packages)
+
+from dflow import argo_range
 
 if "__file__" in locals():
     upload_packages.append(__file__)
@@ -35,14 +38,18 @@ class RelaxRun(OP):
             op_in: OPIO,
     ) -> OPIO:
         op_out = OPIO({
-            "out_tasks": Path('relaxation')
+            "out_tasks": Path('confs')
         })
-        path_to_relaxation = op_in['target_tasks']
-        path_to_work = path_to_relaxation/'relax_task'
+        structures = op_in['target_tasks']
+        conf_dirs = []
+        conf_dirs.extend(glob.glob(os.path.join(str(structures),'')))
+        print(conf_dirs)
         cwd = os.getcwd()
-        self.run(path_to_work)
-        os.chdir(cwd)
-        shutil.copytree(path_to_relaxation, op_out["out_tasks"])
+        for ii in conf_dirs:
+            path_to_work = os.path.join(ii,'relaxation/relax_task')
+            self.run(path_to_work)
+            os.chdir(cwd)
+        shutil.copytree(structures, op_out["out_tasks"])
         return op_out
 
 

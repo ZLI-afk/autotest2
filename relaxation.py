@@ -3,6 +3,7 @@ from dflow.python import (OP, OPIO, Artifact, OPIOSign, upload_packages)
 
 import os
 import shutil
+import glob
 
 from monty.serialization import loadfn
 from dpgen.auto_test.common_equi import (make_equi, post_equi)
@@ -19,7 +20,7 @@ class RelaxMake(OP):
     def get_input_sign(cls):
         return OPIOSign({
             'parameters': Artifact(Path),
-            'structure': Artifact(Path),
+            'relaxdir': Artifact(Path),
             'potential': Artifact(Path)
         })
 
@@ -27,40 +28,52 @@ class RelaxMake(OP):
     def get_output_sign(cls):
         return OPIOSign({
             'inter': dict,
+            'relax': dict,
+            #'tasklist': Artifact([Path]),
             'tasks': Artifact(Path)
         })
-
+    
     @OP.exec_sign_check
     def execute(
             self,
             op_in: OPIO,
     ) -> OPIO:
+        structures = [os.path.join(str(op_in['relaxdir'].parent),loadfn(op_in['parameters'])["structures"][0])]
+        conf_dirs = []
+        for conf in structures:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs.sort()
+
         op_out = OPIO({
-            "inter": loadfn(op_in['parameters'])["relaxation"],
-            "tasks": Path("relaxation")
+            "inter": loadfn(op_in['parameters'])["interaction"],
+            "relax": loadfn(op_in['parameters'])["relaxation"],
+            "tasks": Path("confs"),
+            #"tasklist": list(Path("confs").glob('*'))
+            #"tasklist": glob.glob("confs/*")
         })
 
         inter_parameter = loadfn(op_in['parameters'])["interaction"]
         relax_param = loadfn(op_in['parameters'])["relaxation"]
-        confs = [str(op_in['structure'].parent)]
 
         cwd = os.getcwd()
-        make_equi(confs, inter_parameter, relax_param)
+        make_equi(structures, inter_parameter, relax_param)
 
-        relaxtaion = os.path.join(confs[0], 'relaxation')
-        relax_task = os.path.join(relaxtaion, 'relax_task')
-        os.chdir(relaxtaion)
-        if os.path.islink('frozen_model.pb'):
-            os.remove('frozen_model.pb')
-        shutil.copyfile(op_in['potential'], 'frozen_model.pb')
-        os.chdir(relax_task)
-        if os.path.islink('frozen_model.pb') and os.path.islink('POSCAR'):
-            os.remove('frozen_model.pb')
-            os.remove('POSCAR')
-        shutil.copyfile(op_in['potential'], 'frozen_model.pb')
-        shutil.copyfile(op_in['structure'], 'POSCAR')
-        os.chdir(cwd)
-        shutil.copytree(relaxtaion, 'relaxation')
+        for ii in conf_dirs:
+            relaxation = os.path.join(ii, 'relaxation')
+            relax_task = os.path.join(relaxation, 'relax_task')
+            os.chdir(relaxation)
+            if os.path.islink('frozen_model.pb'):
+                os.remove('frozen_model.pb')
+            shutil.copyfile(op_in['potential'], 'frozen_model.pb')
+            os.chdir(relax_task)
+            if os.path.islink('frozen_model.pb') and os.path.islink('POSCAR'):
+                os.remove('frozen_model.pb')
+                os.remove('POSCAR')
+            shutil.copyfile(op_in['potential'], 'frozen_model.pb')
+            shutil.copyfile('../../POSCAR', 'POSCAR')
+            os.chdir(cwd)
+            #shutil.copytree(relaxtaion, 'relaxation')
+        shutil.copytree(op_in['relaxdir'], 'confs')
 
         return op_out
 
@@ -79,8 +92,8 @@ class RelaxPost(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'result_json': Artifact(Path),
-            'relaxation_finished': Artifact(Path),
+            #'result_json': Artifact(Path),
+            'relaxation_finished': Artifact(Path)
         })
 
     @OP.exec_sign_check
@@ -89,16 +102,17 @@ class RelaxPost(OP):
             op_in: OPIO,
     ) -> OPIO:
         op_out = OPIO({
-            "result_json": Path("result.json"),
-            "relaxation_finished": Path("relaxation"),
+            #"result_json": Path("result.json"),
+            "relaxation_finished": Path("confs")
         })
-        confs = [str(op_in["result_tasks"].parent)]
+        structures = [os.path.join(str(op_in['result_tasks'].parent),loadfn(op_in['parameters'])["structures"][0])]
+        #confs = [str(op_in["result_tasks"].parent)]
         inter_param = loadfn(op_in['parameters'])["interaction"]
 
         cwd = os.getcwd()
-        post_equi(confs, inter_param)
+        post_equi(structures, inter_param)
         os.chdir(cwd)
-        shutil.copytree(op_in["result_tasks"], 'relaxation')
+        shutil.copytree(op_in["result_tasks"], 'confs')
 
         return op_out
 

@@ -1,0 +1,34 @@
+{
+    "lbg_resource_dict" : {
+    "number_node": 1,
+    "cpu_per_node": 8,
+    "gpu_per_node": 1,
+    "queue_name": "dflow_run",
+    "group_size": 1,
+    "source_list": ["/opt/deepmd-kit-2.0.1"]
+},
+
+    "lbg_machine_dict" : {
+    "batch_type": "Lebesgue",
+    "context_type": "LebesgueContext",
+    "local_root": "./",
+    "remote_profile": {
+        "email": "xxxx",
+        "password": "xxxx",
+        "program_id": xxxx,
+        "input_data": {
+            "api_version": 2,
+            "job_type": "indicate",
+            "log_file": "log",
+            "grouped": true,
+            "job_name": "dflow_run",
+            "disk_size": 100,
+            "scass_type": "c12_m92_1 * NVIDIA V100",
+            "platform": "ali",
+            "image_name": "LBG_DeePMD-kit_2.0.1_v1.1",
+            "on_demand": 0
+        }
+    }
+}
+}
+

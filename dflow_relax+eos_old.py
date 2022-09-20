@@ -1,10 +1,41 @@
 import time
-from monty.serialization import loadfn, dumpfn
 
-from dflow import Step, Workflow, download_artifact, upload_artifact, argo_range
-from dflow.python import (PythonOPTemplate, Slices)
+from dflow import Step, Workflow, download_artifact, upload_artifact
+from dflow.python import PythonOPTemplate
 from dflow.plugins.dispatcher import DispatcherExecutor
 
+lbg_resource_dict = {
+    "number_node": 1,
+    "cpu_per_node": 8,
+    "gpu_per_node": 1,
+    "queue_name": "dflow_run",
+    "group_size": 1,
+    "source_list": ["/opt/deepmd-kit-2.0.1"]
+    # "source_list": ["/opt/intel/oneapi/setvars.sh"]
+}
+lbg_machine_dict = {
+    "batch_type": "Lebesgue",
+    "context_type": "LebesgueContext",
+    "local_root": "./",
+    "remote_profile": {
+        "email": "tongqwen@hku.hk",
+        "password": "D62Bg31b,",
+        "program_id": 1734,
+        "input_data": {
+            "api_version": 2,
+            "job_type": "indicate",
+            "log_file": "log",
+            "grouped": True,
+            "job_name": "dflow_run",
+            "disk_size": 100,
+            "scass_type": "c12_m92_1 * NVIDIA V100",
+            "platform": "ali",
+            # "image_name":"zhuoyli/dflow_test:eos",
+            "image_name": "LBG_DeePMD-kit_2.0.1_v1.1",
+            "on_demand": 0
+        }
+    }
+}
 
 def main():
     from relaxation import (RelaxMake, RelaxPost)
@@ -12,59 +43,39 @@ def main():
     from run_relaxation import RelaxRun
     from run_property import PropertyRun
     # define dispatcher
-    #dispatcher_executor = DispatcherExecutor(
-    #    host="127.0.0.1", port="2746",
-    #    machine_dict=lbg_machine_dict,
-    #    resources_dict=lbg_resource_dict)
+    dispatcher_executor = DispatcherExecutor(
+        host="127.0.0.1", port="2746",
+        machine_dict=lbg_machine_dict,
+        resources_dict=lbg_resource_dict)
 
     wf = Workflow(name="relax")
 
     artifact0 = upload_artifact("param_relax.json")
-    artifact1 = upload_artifact("confs")
+    artifact1 = upload_artifact("POSCAR")
     artifact2 = upload_artifact("frozen_model.pb")
     artifact3 = upload_artifact("param_prop.json")
-    artifact4 = upload_artifact("machine.json")
     print(artifact0)
     print(artifact1)
     print(artifact2)
     print(artifact3)
-    print(artifact4)
-
-    dispatcher_executor = DispatcherExecutor(
-        host="127.0.0.1", port="2746",
-        machine_dict=loadfn("machine.json")["lbg_machine_dict"],
-        resources_dict=loadfn("machine.json")["lbg_resource_dict"])
-
-    #os.system("tar -xzvf confs.tar.gz")
 
     relax_make = Step(
         name="relax-make",
         template=PythonOPTemplate(RelaxMake, image="zhuoyli/dflow_test:local_cn"),
         artifacts={"parameters": artifact0,
-                   "relaxdir": artifact1,
+                   "structure": artifact1,
                    "potential": artifact2},
     )
     artifact_target_tasks = relax_make.outputs.artifacts["tasks"]
-    #artifact_task_list = relax_make.outputs.artifacts["tasklist"]
-
-    #relax_run = Step(
-    #    name="relax-run",
-    #    template=PythonOPTemplate(RelaxRun,
-    #                              image="zhuoyli/dflow_test:local_cn",
-    #                              command=['python3']),
-    #    artifacts={"target_tasks": artifact_target_tasks}, executor=dispatcher_executor,
-    #    util_command=['python3']
-    #)
 
     relax_run = Step(
         name="relax-run",
-        template=PythonOPTemplate(RelaxRun, slices=Slices("{{item}}", input_artifact=["target_tasks"]),
-                                  image="zhuoyli/dflow_test:local_cn",
+        template=PythonOPTemplate(RelaxRun,
+                                  image="zhuoyli/dflow_test:cn",
                                   command=['python3']),
-        artifacts={"target_tasks":""}, with_param=argo_range(2), key="dflow-autotest-{{item}}", executor=dispatcher_executor,
+        artifacts={"target_tasks": artifact_target_tasks}, executor=dispatcher_executor,
         util_command=['python3']
     )
-    
     artifact_out_tasks = relax_run.outputs.artifacts["out_tasks"]
 
     relax_post = Step(
@@ -111,12 +122,6 @@ def main():
 
     while wf.query_status() in ["Pending", "Running"]:
         time.sleep(1)
-
-    assert (wf.query_status() == "Succeeded")
-    relaxmake_step = wf.query_step(name="relax-make")[0]
-    assert (relaxmake_step.phase == "Succeeded")
-    download_artifact(relaxmake_step.outputs.artifacts["tasks"])
-
 
     assert (wf.query_status() == "Succeeded")
     final_step = wf.query_step(name="post-eos")[0]
