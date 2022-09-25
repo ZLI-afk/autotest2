@@ -18,9 +18,9 @@ lbg_machine_dict = {
     "context_type": "LebesgueContext",
     "local_root": "./",
     "remote_profile": {
-        "email": "zhuoyli@connect.hku.hk",
-        "password": "enoughBor715!",
-        "program_id": 2315,
+        "email": "******",
+        "password": "******",
+        "program_id": ****,
         "input_data": {
             "api_version": 2,
             "job_type": "indicate",
